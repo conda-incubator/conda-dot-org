@@ -1,0 +1,87 @@
+---
+title: Conda Environments: a Tale of Five Prefixes
+slug: 2023-07-01-prefixes
+description: The new `conda doctor` command allows users to detect packages with missing files in their conda environments.
+authors: [kenodegard]
+tags: [conda, context, prefix, prefixes, api]
+image: img/blog/2023-07-01-prefixes/????
+
+---
+
+import Image from '@theme/IdealImage';
+import condadoctor from '@site/static/img/blog/2023-06-01-conda-doctor/stethoscope.jpg';
+
+<Image img={condadoctor} alt="Banner image for blog post; picture of a stethoscope"/>
+
+<hr />
+
+<p>
+    <i>
+        Photo by Roman Valiev on <a href="https://www.istockphoto.com/stock-photos">Getty Images/iStockphoto</a>
+    </i>
+</p>
+
+---
+
+Conda has supported and encouraged the usage of environments since merging the conda-env project into [conda proper back in 2016](https://github.com/conda/conda/pull/2950) with the release of [conda 4.2.0](https://github.com/conda/conda/releases/tag/4.2.0). Environments were a celebrated shift away from the "install everything into your `base` environment" mentality that often resulted in a bloated environment that over time became cumbersome to work with and difficult, if not impossible, to update. Environments improved reproducibility, package compatibility, and avoided conflicts between different software requirements.
+
+Prefixes play the crucial role of making environments work. Every environment, whether created via `conda create --name NAME` or `conda create --prefix PREFIX`, has a prefix which is where everything belonging to that environment is stored. This includes the environment's configuration files, packages, and any other files that are created or modified when using the environment.
+
+Conda defines five different prefixes (all defined and accessible via the `conda.base.context.context` object):
+
+1. `active_prefix`
+2. `conda_prefix`
+3. `default_prefix`
+4. `root_prefix`
+5. `target_prefix`
+
+Unfortunately these values were poorly documented and appear at times to be haphazardly used throughout conda. Furthermore, efforts to speedup and parallelize the conda testsuite exposed oddities in how these values were detected not to mention used. This resulted in the effort to research these prefixes and to better understand and document what these different prefixes are and what they do.
+
+## `git blame`
+
+Besides understanding what the code does today it's also valuable to understand the context for why something was originally added. Thus the first task is often to turn to `git blame` and taking a trip down memory lane.
+
+#### `active_prefix`
+
+Introduced in conda 4.4.0 (see cbbe81f)
+part of cleaning up the `conda info` output
+
+#### `conda_prefix`
+
+Introduced in conda 4.2.0 (see 6e730cc)
+part of the private conda environment effort
+
+#### `default_prefix`
+
+previously `conda.config.default_prefix` → `conda.config.DEFAULT_ENV_PREFIX` → `conda.config.default_environment` → `conda.anaconda.default_environment`
+Introduced in conda 1.1.0 (see acd8144)
+part of a larger configuration overhaul
+
+#### `root_prefix`
+
+previously `conda.config.root_dir` → `conda.config.ROOT_DIR`
+Introduced in conda 1.1.0 (see d2b370a)
+originally intended for testing purposes only
+
+#### `target_prefix`
+
+previously `prefix` → `conda.cli.common.get_prefix()` → `conda.cli.utils.get_prefix()`
+Introduced in conda 1.3.0 (see 9fd0f4b)
+to abstract out the `--name`/`--prefix` logic from the CLI implementations
+
+## What for?
+
+Within conda we define and interact with five prefixes (these are all defined and accessible via the `conda.base.context.context` object):
+
+1. `conda_prefix`: this is where conda is installed (i.e., `sys.prefix`)
+2. `root_prefix`: this can be defined in `.condarc`, otherwise it defaults to `conda_prefix`
+3. `active_prefix`: this is the currently active environment (i.e., `$CONDA_PREFIX`)
+4. `default_prefix`: this is `active_prefix` if defined, otherwise it defaults to the `base` environment (the base environment name can be controlled via `$CONDA_DEFAULT_ENV`)
+5. `target_prefix`: this is the environment specified on the CLI via `--name`/`--prefix`, otherwise it defaults to `default_conda`
+
+conda_prefix == root_prefix
+for subcommands where --name/--prefix is not provided (e.g., conda info)
+active_prefix == default_prefix == target_prefix
+for subcommands where --name/--prefix is provided (e.g., conda create)
+active_prefix == default_prefix
+target_prefix == --name/--prefix
